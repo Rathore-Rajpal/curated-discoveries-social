@@ -1,8 +1,10 @@
 
-import React from "react";
+import React, { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Link } from "react-router-dom";
+import { EditProfileDialog } from "./EditProfileDialog";
+import { Pencil } from "lucide-react";
 
 export interface UserProfileHeaderProps {
   user: {
@@ -22,6 +24,8 @@ export interface UserProfileHeaderProps {
 }
 
 export function UserProfileHeader({ user, stats }: UserProfileHeaderProps) {
+  const [editProfileOpen, setEditProfileOpen] = useState(false);
+
   return (
     <div className="bg-background rounded-lg overflow-hidden border">
       <div className="h-32 bg-brand-purple-light" />
@@ -41,7 +45,10 @@ export function UserProfileHeader({ user, stats }: UserProfileHeaderProps) {
           </div>
           
           {user.isCurrentUser ? (
-            <Button variant="outline" className="ml-auto">Edit Profile</Button>
+            <Button variant="outline" className="ml-auto flex gap-2" onClick={() => setEditProfileOpen(true)}>
+              <Pencil className="h-4 w-4" />
+              Edit Profile
+            </Button>
           ) : (
             <Button className="ml-auto">
               {user.isFollowing ? "Following" : "Follow"}
@@ -67,6 +74,11 @@ export function UserProfileHeader({ user, stats }: UserProfileHeaderProps) {
             <span className="text-muted-foreground ml-1">Curations</span>
           </div>
         </div>
+
+        <EditProfileDialog 
+          open={editProfileOpen} 
+          onOpenChange={setEditProfileOpen} 
+        />
       </div>
     </div>
   );

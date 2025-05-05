@@ -60,6 +60,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  // Explicitly define refreshProfile to ensure it's properly typed and implemented
   const refreshProfile = async () => {
     if (user) {
       await fetchUserProfile(user.id);
@@ -185,7 +186,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     signOut,
     loading,
     profileLoading,
-    refreshProfile,
+    refreshProfile, // Make sure this is included
   };
 
   return (
