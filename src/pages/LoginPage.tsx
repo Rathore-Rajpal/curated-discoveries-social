@@ -1,39 +1,70 @@
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Link, Navigate } from "react-router-dom";
+import { Link, Navigate, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
+import { Eye, EyeOff } from "lucide-react";
 
 const LoginPage = () => {
   const { signIn, loading, user } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [formError, setFormError] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const navigate = useNavigate();
+  const location = useLocation();
+  
+  // Extract redirect parameter if available
+  const from = location.state?.from || "/";
 
   // Redirect if user is already logged in
-  if (user) {
-    return <Navigate to="/" replace />;
-  }
+  useEffect(() => {
+    if (user) {
+      navigate(from, { replace: true });
+    }
+  }, [user, navigate, from]);
+
+  const validateForm = () => {
+    if (!email.trim()) {
+      setFormError("Email is required");
+      return false;
+    }
+    
+    if (!password) {
+      setFormError("Password is required");
+      return false;
+    }
+    
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      setFormError("Please enter a valid email address");
+      return false;
+    }
+    
+    return true;
+  };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Basic validation
-    if (!email || !password) {
-      setFormError("Email and password are required");
+    if (!validateForm()) {
       return;
     }
 
     try {
-      await signIn(email, password);
       setFormError("");
+      await signIn(email, password);
+      // Navigate is handled in AuthContext
     } catch (error: any) {
-      // Error is handled in the Auth context
+      // Error is handled in the Auth context, but we can provide additional guidance
+      if (error.message.includes("Email not confirmed")) {
+        setFormError("Please check your email to confirm your account before logging in.");
+      }
       console.error("Login error:", error);
     }
   };
@@ -42,6 +73,10 @@ const LoginPage = () => {
     // For future implementation
     toast.info(`${provider} login coming soon!`);
   };
+
+  if (user) {
+    return <Navigate to={from} replace />;
+  }
 
   return (
     <MainLayout>
@@ -61,6 +96,7 @@ const LoginPage = () => {
                   className="w-full"
                   onClick={() => handleSocialLogin('Facebook')}
                   type="button"
+                  disabled={loading}
                 >
                   <svg
                     className="mr-2 h-4 w-4"
@@ -81,6 +117,7 @@ const LoginPage = () => {
                   className="w-full"
                   onClick={() => handleSocialLogin('Google')}
                   type="button"
+                  disabled={loading}
                 >
                   <svg
                     className="mr-2 h-4 w-4"
@@ -125,18 +162,35 @@ const LoginPage = () => {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     disabled={loading}
+                    autoComplete="email"
                   />
                 </div>
                 
                 <div className="space-y-2">
                   <Label htmlFor="password">Password</Label>
-                  <Input 
-                    id="password" 
-                    type="password" 
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    disabled={loading}
-                  />
+                  <div className="relative">
+                    <Input 
+                      id="password" 
+                      type={showPassword ? "text" : "password"} 
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      disabled={loading}
+                      autoComplete="current-password"
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="absolute right-0 top-0 h-full px-3"
+                      onClick={() => setShowPassword(!showPassword)}
+                    >
+                      {showPassword ? (
+                        <EyeOff className="h-4 w-4" />
+                      ) : (
+                        <Eye className="h-4 w-4" />
+                      )}
+                    </Button>
+                  </div>
                 </div>
 
                 <Button className="w-full" type="submit" disabled={loading}>

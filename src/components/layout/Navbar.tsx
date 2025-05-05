@@ -1,6 +1,6 @@
 
 import React from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Search, PlusSquare, Bell, User, LogOut } from "lucide-react";
@@ -16,7 +16,8 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 export function Navbar() {
-  const { user, signOut } = useAuth();
+  const { user, userProfile, signOut, loading } = useAuth();
+  const navigate = useNavigate();
 
   const handleSignOut = async () => {
     await signOut();
@@ -24,12 +25,16 @@ export function Navbar() {
 
   // Get first letter of name for avatar fallback
   const getInitials = () => {
-    if (!user || !user.user_metadata?.full_name) return "U";
-    return user.user_metadata.full_name.charAt(0).toUpperCase();
+    if (userProfile?.full_name) {
+      return userProfile.full_name.charAt(0).toUpperCase();
+    } else if (userProfile?.username) {
+      return userProfile.username.charAt(0).toUpperCase();
+    }
+    return "U";
   };
 
   return (
-    <header className="border-b bg-background">
+    <header className="border-b bg-background sticky top-0 z-10">
       <div className="container mx-auto px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-6">
           <Link to="/" className="flex items-center gap-2">
@@ -64,8 +69,8 @@ export function Navbar() {
                   <Button variant="ghost" size="icon" className="rounded-full">
                     <Avatar className="h-8 w-8">
                       <AvatarImage 
-                        src={user.user_metadata?.avatar_url} 
-                        alt={user.user_metadata?.full_name || "User"} 
+                        src={userProfile?.avatar_url || undefined} 
+                        alt={userProfile?.full_name || userProfile?.username || "User"} 
                       />
                       <AvatarFallback>{getInitials()}</AvatarFallback>
                     </Avatar>
@@ -73,11 +78,14 @@ export function Navbar() {
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
                   <DropdownMenuLabel>
-                    {user.user_metadata?.full_name || "My Account"}
+                    {userProfile?.full_name || userProfile?.username || "My Account"}
                   </DropdownMenuLabel>
+                  <DropdownMenuItem disabled={loading} className="text-muted-foreground text-sm">
+                    @{userProfile?.username || "..."}
+                  </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem asChild>
-                    <Link to={`/profile/${user.user_metadata?.username || user.id}`} className="cursor-pointer">
+                    <Link to={`/profile/${userProfile?.username || 'me'}`} className="cursor-pointer">
                       <User className="mr-2 h-4 w-4" />
                       <span>Profile</span>
                     </Link>
