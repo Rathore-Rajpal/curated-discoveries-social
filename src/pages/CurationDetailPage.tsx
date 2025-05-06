@@ -49,7 +49,10 @@ const CurationDetailPage = () => {
 
   useEffect(() => {
     const fetchCuration = async () => {
-      if (!id) return;
+      if (!id) {
+        setLoading(false);
+        return;
+      }
 
       try {
         setLoading(true);
@@ -69,7 +72,12 @@ const CurationDetailPage = () => {
           .eq('id', id)
           .single();
 
-        if (curationError) throw curationError;
+        if (curationError) {
+          console.error('Error fetching curation:', curationError);
+          toast.error('Failed to load curation');
+          setLoading(false);
+          return;
+        }
 
         // Fetch items
         const { data: itemsData, error: itemsError } = await supabase
@@ -78,7 +86,12 @@ const CurationDetailPage = () => {
           .eq('curation_id', id)
           .order('position', { ascending: true });
 
-        if (itemsError) throw itemsError;
+        if (itemsError) {
+          console.error('Error fetching items:', itemsError);
+          toast.error('Failed to load items');
+          setLoading(false);
+          return;
+        }
 
         setCuration({
           ...curationData,
@@ -88,15 +101,15 @@ const CurationDetailPage = () => {
 
         setIsOwner(user?.id === curationData.user_id);
       } catch (error) {
-        console.error('Error fetching curation:', error);
-        toast.error('Failed to load curation');
+        console.error('Error in fetchCuration:', error);
+        toast.error('An unexpected error occurred');
       } finally {
         setLoading(false);
       }
     };
 
     fetchCuration();
-  }, [id, user]);
+  }, [id, user?.id]);
 
   const handleItemAdded = async () => {
     if (!id) return;

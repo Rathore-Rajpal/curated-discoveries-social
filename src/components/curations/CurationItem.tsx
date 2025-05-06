@@ -3,7 +3,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Pencil, Save, X } from "lucide-react";
+import { Pencil, Save, X, Upload, Image as ImageIcon } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
@@ -27,7 +27,41 @@ export function CurationItem({ item, onItemUpdated }: CurationItemProps) {
   const [title, setTitle] = useState(item.title);
   const [description, setDescription] = useState(item.description || '');
   const [externalUrl, setExternalUrl] = useState(item.external_url || '');
+  const [imageUrl, setImageUrl] = useState(item.image_url);
   const [loading, setLoading] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    try {
+      const file = e.target.files?.[0];
+      if (!file) return;
+
+      setUploadingImage(true);
+
+      // Upload image to Supabase Storage
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Math.random()}.${fileExt}`;
+      const filePath = `curation-items/${item.id}/${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('images')
+        .upload(filePath, file);
+
+      if (uploadError) throw uploadError;
+
+      // Get public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('images')
+        .getPublicUrl(filePath);
+
+      setImageUrl(publicUrl);
+    } catch (error: any) {
+      console.error('Error uploading image:', error);
+      toast.error(error.message || 'Failed to upload image');
+    } finally {
+      setUploadingImage(false);
+    }
+  };
 
   const handleSave = async () => {
     try {
@@ -39,6 +73,7 @@ export function CurationItem({ item, onItemUpdated }: CurationItemProps) {
           title,
           description: description || null,
           external_url: externalUrl || null,
+          image_url: imageUrl,
           updated_at: new Date().toISOString()
         })
         .eq('id', item.id);
@@ -60,6 +95,7 @@ export function CurationItem({ item, onItemUpdated }: CurationItemProps) {
     setTitle(item.title);
     setDescription(item.description || '');
     setExternalUrl(item.external_url || '');
+    setImageUrl(item.image_url);
     setIsEditing(false);
   };
 
@@ -70,14 +106,6 @@ export function CurationItem({ item, onItemUpdated }: CurationItemProps) {
           {item.position + 1}
         </div>
         <CardContent className="p-4 flex-1">
-          {item.image_url && (
-            <div className="float-right ml-4 mb-2">
-              <div className="w-12 h-12 md:w-16 md:h-16 rounded overflow-hidden bg-muted">
-                <img src={item.image_url} alt={item.title} className="w-full h-full object-cover" />
-              </div>
-            </div>
-          )}
-          
           {isEditing ? (
             <div className="space-y-3">
               <Input
@@ -96,11 +124,46 @@ export function CurationItem({ item, onItemUpdated }: CurationItemProps) {
                 onChange={(e) => setExternalUrl(e.target.value)}
                 placeholder="External URL"
               />
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="relative"
+                    disabled={uploadingImage}
+                  >
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                      onChange={handleImageUpload}
+                      disabled={uploadingImage}
+                    />
+                    <Upload className="h-4 w-4 mr-2" />
+                    {uploadingImage ? 'Uploading...' : 'Upload Image'}
+                  </Button>
+                  {imageUrl && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setImageUrl(null)}
+                      disabled={uploadingImage}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
+                {imageUrl && (
+                  <div className="w-32 h-32 rounded overflow-hidden bg-muted">
+                    <img src={imageUrl} alt="Preview" className="w-full h-full object-cover" />
+                  </div>
+                )}
+              </div>
               <div className="flex gap-2">
                 <Button
                   size="sm"
                   onClick={handleSave}
-                  disabled={loading}
+                  disabled={loading || uploadingImage}
                 >
                   <Save className="h-4 w-4 mr-2" />
                   Save
@@ -109,7 +172,7 @@ export function CurationItem({ item, onItemUpdated }: CurationItemProps) {
                   size="sm"
                   variant="outline"
                   onClick={handleCancel}
-                  disabled={loading}
+                  disabled={loading || uploadingImage}
                 >
                   <X className="h-4 w-4 mr-2" />
                   Cancel
@@ -141,6 +204,13 @@ export function CurationItem({ item, onItemUpdated }: CurationItemProps) {
                 >
                   Visit Link
                 </a>
+              )}
+              {item.image_url && (
+                <div className="mt-2">
+                  <div className="w-32 h-32 rounded overflow-hidden bg-muted">
+                    <img src={item.image_url} alt={item.title} className="w-full h-full object-cover" />
+                  </div>
+                </div>
               )}
             </>
           )}
