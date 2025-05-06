@@ -20,6 +20,7 @@ interface CurationItem {
   external_url: string | null;
   image_url: string | null;
   position: number;
+  curation_id: string;
 }
 
 interface Curation {
@@ -118,6 +119,26 @@ const CurationDetailPage = () => {
     }
   };
 
+  const handleItemUpdated = async () => {
+    if (!id) return;
+
+    try {
+      // Fetch updated items
+      const { data: itemsData, error: itemsError } = await supabase
+        .from('curation_items')
+        .select('*')
+        .eq('curation_id', id)
+        .order('position', { ascending: true });
+
+      if (itemsError) throw itemsError;
+
+      setCuration(prev => prev ? { ...prev, items: itemsData } : null);
+    } catch (error) {
+      console.error('Error refreshing items:', error);
+      toast.error('Failed to refresh items');
+    }
+  };
+
   if (loading) {
     return (
       <MainLayout>
@@ -207,7 +228,11 @@ const CurationDetailPage = () => {
 
         <div className="space-y-4">
           {curation.items.map((item) => (
-            <CurationItem key={item.id} item={item} />
+            <CurationItem 
+              key={item.id} 
+              item={item} 
+              onItemUpdated={handleItemUpdated}
+            />
           ))}
         </div>
       </div>

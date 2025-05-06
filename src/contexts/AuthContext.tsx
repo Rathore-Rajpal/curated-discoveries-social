@@ -9,8 +9,11 @@ interface UserProfile {
   username: string;
   full_name: string | null;
   avatar_url: string | null;
-  cover_url: string | null;
   bio: string | null;
+  email: string | null;
+  website: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 interface AuthContextType {
@@ -37,54 +40,83 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const navigate = useNavigate();
 
   useEffect(() => {
-    console.log('AuthProvider: Initializing auth state...');
+    let mounted = true;
     
-    // Get initial session
-    supabase.auth.getSession().then(({ data: { session }, error }) => {
-      console.log('AuthProvider: Initial session check:', { session, error });
-      if (error) {
-        console.error('AuthProvider: Error getting session:', error);
-        setError(error.message);
-        setLoading(false);
-        return;
+    const init = async () => {
+      try {
+        // Get session
+        const { data: { session } } = await supabase.auth.getSession();
+        
+        if (!mounted) return;
+        
+        setSession(session);
+        setUser(session?.user ?? null);
+        
+        if (session?.user) {
+          // Get profile
+          const { data: profile, error } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', session.user.id)
+            .single();
+            
+          if (!mounted) return;
+          
+          if (error) {
+            console.error('Profile error:', error);
+            setError(error.message);
+          } else if (profile) {
+            setUserProfile(profile as UserProfile);
+          }
+        }
+      } catch (error) {
+        console.error('Init error:', error);
+      } finally {
+        if (mounted) {
+          setLoading(false);
+        }
       }
-      
-      console.log('AuthProvider: Initial session:', session);
-      setSession(session);
-      setUser(session?.user ?? null);
-      
-      if (session?.user) {
-        fetchUserProfile(session.user.id);
-      } else {
-        setLoading(false);
-      }
-    });
+    };
 
-    // Listen for auth changes
+    init();
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log('AuthProvider: Auth state changed:', { event, session });
+      if (!mounted) return;
       
       setSession(session);
       setUser(session?.user ?? null);
       
       if (event === 'SIGNED_IN' && session?.user) {
-        await fetchUserProfile(session.user.id);
+        const { data: profile, error } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', session.user.id)
+          .single();
+          
+        if (!mounted) return;
+        
+        if (error) {
+          console.error('Profile error:', error);
+          setError(error.message);
+        } else if (profile) {
+          setUserProfile(profile as UserProfile);
+        }
       } else if (event === 'SIGNED_OUT') {
         setUserProfile(null);
       }
-      
-      setLoading(false);
     });
 
     return () => {
+      mounted = false;
       subscription.unsubscribe();
     };
   }, []);
 
   const fetchUserProfile = async (userId: string) => {
     try {
-      console.log('AuthProvider: Fetching user profile for:', userId);
+      console.log('AuthProvider: Starting profile fetch for user:', userId);
       setProfileLoading(true);
+      
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
@@ -94,39 +126,68 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (error) {
         console.error('AuthProvider: Error fetching user profile:', error);
         setError(error.message);
+        setLoading(false);
         return;
       }
 
-      console.log('AuthProvider: Fetched user profile:', data);
+      console.log('AuthProvider: Profile fetch successful:', { 
+        userId: data?.id,
+        username: data?.username 
+      });
+      
       if (data) {
-        setUserProfile(data as unknown as UserProfile);
+        setUserProfile(data as UserProfile);
       }
     } catch (error: any) {
       console.error('AuthProvider: Error fetching profile:', error);
       setError(error.message);
     } finally {
+      console.log('AuthProvider: Profile fetch complete');
       setProfileLoading(false);
+      setLoading(false);
     }
   };
 
   const signIn = async (email: string, password: string) => {
     try {
-      console.log('AuthProvider: Starting sign in process...');
       setLoading(true);
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
+
+      // Validate inputs
+      if (!email || !password) {
+        throw new Error('Email and password are required');
+      }
+
+      // Trim email
+      const trimmedEmail = email.trim().toLowerCase();
+
+      // Validate email format
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(trimmedEmail)) {
+        throw new Error('Please enter a valid email address');
+      }
+
+      // Sign in
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: trimmedEmail,
         password,
       });
 
       if (error) {
-        console.error('AuthProvider: Sign in error:', error);
-        throw error;
+        console.error('Sign in error:', error);
+        throw new Error(error.message || 'Failed to sign in');
       }
 
-      console.log('AuthProvider: Sign in successful');
+      if (!data.user) {
+        throw new Error('No user found');
+      }
+
+      // Fetch user profile
+      await fetchUserProfile(data.user.id);
+
       toast.success('Signed in successfully');
+      navigate('/');
     } catch (error: any) {
-      console.error('AuthProvider: Sign in error:', error);
+      console.error('Sign in error:', error);
       toast.error(error.message || 'Failed to sign in');
       throw error;
     } finally {
@@ -134,152 +195,112 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const signUp = async (email: string, password: string, name: string, username: string) => {
+  const signUp = async (
+    email: string,
+    password: string,
+    name: string,
+    username: string
+  ) => {
     try {
-      // Debug logging for raw inputs
-      console.log('Raw inputs:', {
-        email: typeof email,
-        password: typeof password,
-        name: typeof name,
-        username: typeof username
-      });
-
       setLoading(true);
-      
-      // Convert inputs to strings and trim them
-      const trimmedEmail = email ? String(email).trim() : '';
-      const trimmedPassword = password ? String(password).trim() : '';
-      const trimmedName = name ? String(name).trim() : '';
-      const trimmedUsername = username ? String(username).trim() : '';
 
-      // Debug logging for trimmed values
-      console.log('Trimmed values:', {
-        email: trimmedEmail,
-        password: trimmedPassword,
-        name: trimmedName,
-        username: trimmedUsername
-      });
-
-      // Validate input
-      const validationErrors = [];
-      if (!trimmedEmail) validationErrors.push('Email is required');
-      if (!trimmedPassword) validationErrors.push('Password is required');
-      if (!trimmedName) validationErrors.push('Name is required');
-      if (!trimmedUsername) validationErrors.push('Username is required');
-
-      if (validationErrors.length > 0) {
-        console.log('Validation errors:', validationErrors);
-        throw new Error(validationErrors.join(', '));
+      // Validate inputs
+      if (!email || !password || !name || !username) {
+        throw new Error('All fields are required');
       }
 
+      // Trim all inputs
+      const trimmedEmail = email.trim().toLowerCase();
+      const trimmedName = name.trim();
+      const trimmedUsername = username.toLowerCase().trim();
+
+      // Validate email format
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(trimmedEmail)) {
+        throw new Error('Please enter a valid email address');
+      }
+
+      // Check username length and format
       if (trimmedUsername.length < 3) {
-        throw new Error('Username must be at least 3 characters long');
+        throw new Error('Username must be at least 3 characters');
+      }
+      if (trimmedUsername.length > 30) {
+        throw new Error('Username must be less than 30 characters');
+      }
+      const usernameRegex = /^[a-z0-9_]+$/;
+      if (!usernameRegex.test(trimmedUsername)) {
+        throw new Error('Username can only contain lowercase letters, numbers, and underscores');
       }
 
-      if (trimmedPassword.length < 6) {
-        throw new Error('Password must be at least 6 characters long');
+      // Check password length and complexity
+      if (password.length < 6) {
+        throw new Error('Password must be at least 6 characters');
+      }
+      if (password.length > 72) {
+        throw new Error('Password must be less than 72 characters');
       }
 
-      // First, check if username is available
-      console.log('Checking username availability...');
-      const { data: existingUser, error: checkError } = await supabase
+      // Check if username exists
+      const { data: existingUsers, error: usernameCheckError } = await supabase
         .from('profiles')
         .select('username')
-        .eq('username', trimmedUsername)
-        .single();
+        .eq('username', trimmedUsername);
 
-      if (checkError && checkError.code !== 'PGRST116') {
-        console.error('Error checking username:', checkError);
-        throw new Error('Error checking username availability');
+      if (usernameCheckError) {
+        console.error('Username check error:', usernameCheckError);
+        throw new Error('Failed to check username availability');
       }
 
-      if (existingUser) {
-        console.log('Username already taken');
+      if (existingUsers && existingUsers.length > 0) {
         throw new Error('Username is already taken');
       }
 
-      // Create the auth user with email confirmation
-      console.log('Creating auth user...');
+      // Create auth user
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: trimmedEmail,
-        password: trimmedPassword,
+        password,
         options: {
           data: {
-            name: trimmedName,
+            full_name: trimmedName,
             username: trimmedUsername,
           },
-          emailRedirectTo: `${window.location.origin}/auth/callback`,
         },
       });
 
       if (authError) {
         console.error('Auth signup error:', authError);
-        throw authError;
+        throw new Error(authError.message || 'Failed to create account');
       }
 
       if (!authData.user) {
-        console.error('No user data returned from signup');
-        throw new Error('No user data returned from signup');
+        throw new Error('Failed to create account');
       }
 
-      console.log('Auth user created successfully:', authData.user.id);
-
-      // Create the profile
-      console.log('Creating user profile...');
+      // Create profile
       const { error: profileError } = await supabase
         .from('profiles')
         .insert({
           id: authData.user.id,
           username: trimmedUsername,
           full_name: trimmedName,
+          email: trimmedEmail,
           avatar_url: null,
           cover_url: null,
           bio: null,
-          email_verified: false
+          email_verified: true,
         });
 
       if (profileError) {
         console.error('Profile creation error:', profileError);
-        // If profile creation fails, we should clean up the auth user
+        // Cleanup if profile creation fails
         await supabase.auth.admin.deleteUser(authData.user.id);
-        throw new Error('Failed to create profile. Please try again.');
+        throw new Error('Failed to create user profile');
       }
 
-      console.log('Profile created successfully');
-      
-      // Show success message with email verification instructions
-      toast.success(
-        <div className="flex flex-col gap-2">
-          <p>Account created successfully!</p>
-          <p>Please check your email to verify your account.</p>
-          <p className="text-sm text-gray-500">
-            Didn't receive the email? Check your spam folder or click the button below to resend.
-          </p>
-          <button
-            onClick={async () => {
-              try {
-                const { error } = await supabase.auth.resend({
-                  type: 'signup',
-                  email: trimmedEmail,
-                });
-                if (error) throw error;
-                toast.success('Verification email resent!');
-              } catch (error: any) {
-                toast.error(error.message || 'Failed to resend verification email');
-              }
-            }}
-            className="text-sm text-brand-purple hover:underline"
-          >
-            Resend verification email
-          </button>
-        </div>,
-        {
-          duration: 10000,
-        }
-      );
+      // Show success message
+      toast.success('Account created successfully! You can now log in.');
+      navigate('/login');
 
-      // Navigate to a page that explains the verification process
-      navigate('/verify-email');
     } catch (error: any) {
       console.error('Signup error:', error);
       toast.error(error.message || 'Failed to create account');
@@ -291,11 +312,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const signOut = async () => {
     try {
-      console.log('AuthProvider: Starting sign out process...');
       setLoading(true);
       const { error } = await supabase.auth.signOut();
       if (error) {
-        console.error('AuthProvider: Sign out error:', error);
         throw error;
       }
       
@@ -307,10 +326,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       
       // Navigate to home page
       navigate('/');
-      console.log('AuthProvider: Sign out successful');
       toast.success('Signed out successfully');
     } catch (error: any) {
-      console.error('AuthProvider: Sign out error:', error);
+      console.error('Sign out error:', error);
       toast.error(error.message || 'Failed to sign out');
       throw error;
     } finally {

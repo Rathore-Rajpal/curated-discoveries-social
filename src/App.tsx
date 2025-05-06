@@ -4,6 +4,7 @@ import { ErrorBoundary } from 'react-error-boundary';
 import { AuthProvider } from '@/contexts/AuthContext';
 import AppRoutes from '@/routes';
 import { Toaster } from 'sonner';
+import VerifyEmail from '@/pages/auth/VerifyEmail';
 
 const queryClient = new QueryClient({
   defaultOptions: {

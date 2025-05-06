@@ -1,4 +1,3 @@
-
 import React, { useState } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -25,57 +24,51 @@ const SignupPage = () => {
     return <Navigate to="/" replace />;
   }
 
-  const validateForm = () => {
-    if (!name || !username || !email || !password || !confirmPassword) {
+  const handleSignup = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setFormError("");
+
+    // Basic validation
+    if (!name.trim() || !username.trim() || !email.trim() || !password || !confirmPassword) {
       setFormError("All fields are required");
-      return false;
+      return;
     }
-    
+
+    // Password validation
     if (password.length < 6) {
       setFormError("Password must be at least 6 characters");
-      return false;
+      return;
     }
-    
+
     if (password !== confirmPassword) {
       setFormError("Passwords do not match");
-      return false;
+      return;
     }
-    
+
+    // Email validation
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
+    if (!emailRegex.test(email.trim())) {
       setFormError("Please enter a valid email address");
-      return false;
+      return;
     }
-    
+
+    // Username validation
     const usernameRegex = /^[a-z0-9_\.]+$/;
     if (!usernameRegex.test(username.toLowerCase())) {
       setFormError("Username can only contain lowercase letters, numbers, dots and underscores");
-      return false;
-    }
-    
-    return true;
-  };
-
-  const handleSignup = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (!validateForm()) {
       return;
     }
 
     try {
-      await signUp(email, password, { 
-        full_name: name,
-        username: username.toLowerCase(),
-      });
-      
-      setFormError("");
+      await signUp(
+        email.trim(),
+        password,
+        name.trim(),
+        username.toLowerCase().trim()
+      );
     } catch (error: any) {
-      // Specific error messages for common issues
-      if (error.message.includes("already registered")) {
-        setFormError("This email is already registered. Please log in or use a different email.");
-      }
       console.error("Signup error:", error);
+      setFormError(error.message || "Failed to create account");
     }
   };
 
