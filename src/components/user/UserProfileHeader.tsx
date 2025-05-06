@@ -1,4 +1,3 @@
-
 import React, { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
@@ -13,6 +12,7 @@ export interface UserProfileHeaderProps {
     username: string;
     bio?: string;
     avatarUrl?: string;
+    coverUrl?: string;
     isCurrentUser?: boolean;
     isFollowing?: boolean;
   };
@@ -28,7 +28,14 @@ export function UserProfileHeader({ user, stats }: UserProfileHeaderProps) {
 
   return (
     <div className="bg-background rounded-lg overflow-hidden border">
-      <div className="h-32 bg-brand-purple-light" />
+      <div 
+        className="h-32 bg-brand-purple-light relative"
+        style={{
+          backgroundImage: user.coverUrl ? `url(${user.coverUrl})` : undefined,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center'
+        }}
+      />
       <div className="p-6">
         <div className="flex flex-col md:flex-row md:items-end gap-4 -mt-16">
           <Avatar className="h-24 w-24 border-4 border-background">
@@ -60,7 +67,7 @@ export function UserProfileHeader({ user, stats }: UserProfileHeaderProps) {
           <p className="mt-4 text-sm md:text-base">{user.bio}</p>
         )}
         
-        <div className="flex mt-6 space-x-6">
+        <div className="flex gap-4 mt-4">
           <Link to={`/profile/${user.username}/followers`} className="text-sm">
             <span className="font-semibold">{stats.followersCount}</span>
             <span className="text-muted-foreground ml-1">Followers</span>

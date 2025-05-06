@@ -1,9 +1,8 @@
-
 import React from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Search, PlusSquare, Bell, User, LogOut } from "lucide-react";
+import { Search, PlusSquare, Bell, User, LogOut, Loader2 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   DropdownMenu,
@@ -20,7 +19,12 @@ export function Navbar() {
   const navigate = useNavigate();
 
   const handleSignOut = async () => {
-    await signOut();
+    try {
+      await signOut();
+      // The navigation will be handled by the AuthContext
+    } catch (error) {
+      console.error('Error signing out:', error);
+    }
   };
 
   // Get first letter of name for avatar fallback
@@ -54,7 +58,9 @@ export function Navbar() {
         </div>
 
         <div className="flex items-center gap-3">
-          {user ? (
+          {loading ? (
+            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+          ) : user ? (
             <>
               <Button variant="ghost" size="icon" className="rounded-full">
                 <Bell className="h-5 w-5" />

@@ -1,40 +1,49 @@
+import { BrowserRouter as Router } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { ErrorBoundary } from 'react-error-boundary';
+import { AuthProvider } from '@/contexts/AuthContext';
+import AppRoutes from '@/routes';
+import { Toaster } from 'sonner';
 
-import { Toaster } from "@/components/ui/toaster";
-import { Toaster as Sonner } from "@/components/ui/sonner";
-import { TooltipProvider } from "@/components/ui/tooltip";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
-import Index from "./pages/Index";
-import NotFound from "./pages/NotFound";
-import ProfilePage from "./pages/ProfilePage";
-import CurationDetailPage from "./pages/CurationDetailPage";
-import LoginPage from "./pages/LoginPage";
-import SignupPage from "./pages/SignupPage";
-import CreateCurationPage from "./pages/CreateCurationPage";
-import { AuthProvider } from "./contexts/AuthContext";
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: 1,
+      refetchOnWindowFocus: false,
+    },
+  },
+});
 
-const queryClient = new QueryClient();
+function ErrorFallback({ error, resetErrorBoundary }: { error: Error; resetErrorBoundary: () => void }) {
+  return (
+    <div className="min-h-screen flex items-center justify-center p-4">
+      <div className="text-center">
+        <h1 className="text-2xl font-bold text-red-500 mb-4">Something went wrong</h1>
+        <p className="text-gray-600 mb-4">{error.message}</p>
+        <button
+          onClick={resetErrorBoundary}
+          className="px-4 py-2 bg-brand-purple text-white rounded-md hover:bg-brand-purple-dark"
+        >
+          Try again
+        </button>
+      </div>
+    </div>
+  );
+}
 
-const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <BrowserRouter>
-        <AuthProvider>
-          <Routes>
-            <Route path="/" element={<Index />} />
-            <Route path="/profile/:username" element={<ProfilePage />} />
-            <Route path="/curation/:id" element={<CurationDetailPage />} />
-            <Route path="/login" element={<LoginPage />} />
-            <Route path="/signup" element={<SignupPage />} />
-            <Route path="/create" element={<CreateCurationPage />} />
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </AuthProvider>
-      </BrowserRouter>
-    </TooltipProvider>
-  </QueryClientProvider>
-);
+function App() {
+  return (
+    <ErrorBoundary FallbackComponent={ErrorFallback}>
+      <QueryClientProvider client={queryClient}>
+        <Router>
+          <AuthProvider>
+            <AppRoutes />
+            <Toaster position="top-right" />
+          </AuthProvider>
+        </Router>
+      </QueryClientProvider>
+    </ErrorBoundary>
+  );
+}
 
 export default App;
