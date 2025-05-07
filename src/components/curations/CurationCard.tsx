@@ -1,10 +1,11 @@
-
 import React from "react";
 import { Link } from "react-router-dom";
 import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Heart, MessageCircle, Share2, Bookmark, MoreHorizontal } from "lucide-react";
+import { formatDistanceToNow, isValid } from 'date-fns';
+import { SocialActions } from '@/components/social/SocialActions';
 
 // Color variants for curations
 const colorVariants = {
@@ -21,25 +22,39 @@ type ColorVariant = keyof typeof colorVariants;
 export interface CurationCardProps {
   id: string;
   title: string;
-  description: string;
-  itemCount: number;
+  description: string | null;
+  imageUrl: string | null;
   author: {
-    id: string;
-    name: string;
     username: string;
-    avatarUrl?: string;
+    fullName: string | null;
+    avatarUrl: string | null;
   };
+  createdAt: string;
   likesCount: number;
   commentsCount: number;
   colorVariant?: ColorVariant;
 }
 
+const formatDate = (dateString: string): string => {
+  try {
+    const date = new Date(dateString);
+    if (!isValid(date)) {
+      return 'Invalid date';
+    }
+    return formatDistanceToNow(date, { addSuffix: true });
+  } catch (error) {
+    console.error('Error formatting date:', error);
+    return 'Invalid date';
+  }
+};
+
 export function CurationCard({
   id,
   title,
   description,
-  itemCount,
+  imageUrl,
   author,
+  createdAt,
   likesCount,
   commentsCount,
   colorVariant = "purple",
@@ -52,14 +67,16 @@ export function CurationCard({
           <Link to={`/profile/${author.username}`} className="flex items-center gap-2">
             <Avatar className="h-8 w-8">
               {author.avatarUrl ? (
-                <AvatarImage src={author.avatarUrl} alt={author.name} />
+                <AvatarImage src={author.avatarUrl} alt={author.fullName || author.username} />
               ) : (
-                <AvatarFallback>{author.name.charAt(0)}</AvatarFallback>
+                <AvatarFallback>{author.username.slice(0, 2).toUpperCase()}</AvatarFallback>
               )}
             </Avatar>
             <div className="text-sm">
-              <span className="font-medium">{author.name}</span>
-              <p className="text-xs text-muted-foreground">@{author.username}</p>
+              <span className="font-medium">{author.fullName || author.username}</span>
+              <p className="text-xs text-muted-foreground">
+                {formatDate(createdAt)}
+              </p>
             </div>
           </Link>
           <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full">
@@ -69,34 +86,27 @@ export function CurationCard({
       </CardHeader>
       <CardContent className="pb-2">
         <Link to={`/curation/${id}`}>
+          {imageUrl && (
+            <div className="aspect-video w-full overflow-hidden rounded-lg mb-4">
+              <img
+                src={imageUrl}
+                alt={title}
+                className="w-full h-full object-cover"
+              />
+            </div>
+          )}
           <h3 className="font-semibold text-lg mb-1 curation-link inline">{title}</h3>
         </Link>
-        <p className="text-muted-foreground text-sm mb-2">{description}</p>
-        <div className="text-xs text-muted-foreground">
-          {itemCount} {itemCount === 1 ? "item" : "items"}
-        </div>
+        {description && (
+          <p className="text-muted-foreground text-sm mb-2">{description}</p>
+        )}
       </CardContent>
       <CardFooter className="border-t pt-3">
-        <div className="flex items-center justify-between w-full text-muted-foreground">
-          <div className="flex items-center gap-4">
-            <Button variant="ghost" size="sm" className="flex items-center gap-1 px-2">
-              <Heart className="h-4 w-4" />
-              <span className="text-xs">{likesCount}</span>
-            </Button>
-            <Button variant="ghost" size="sm" className="flex items-center gap-1 px-2">
-              <MessageCircle className="h-4 w-4" />
-              <span className="text-xs">{commentsCount}</span>
-            </Button>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full">
-              <Share2 className="h-4 w-4" />
-            </Button>
-            <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full">
-              <Bookmark className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
+        <SocialActions
+          curationId={id}
+          likesCount={likesCount}
+          commentsCount={commentsCount}
+        />
       </CardFooter>
     </Card>
   );

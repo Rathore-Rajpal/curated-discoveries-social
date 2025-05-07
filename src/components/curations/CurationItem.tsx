@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -30,6 +30,31 @@ export function CurationItem({ item, onItemUpdated }: CurationItemProps) {
   const [imageUrl, setImageUrl] = useState(item.image_url);
   const [loading, setLoading] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [isOwner, setIsOwner] = useState(false);
+
+  useEffect(() => {
+    const checkOwnership = async () => {
+      if (!user) {
+        setIsOwner(false);
+        return;
+      }
+
+      const { data: curation, error } = await supabase
+        .from('curations')
+        .select('user_id')
+        .eq('id', item.curation_id)
+        .single();
+
+      if (error) {
+        console.error('Error checking ownership:', error);
+        return;
+      }
+
+      setIsOwner(curation?.user_id === user.id);
+    };
+
+    checkOwnership();
+  }, [user, item.curation_id]);
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     try {
@@ -43,16 +68,29 @@ export function CurationItem({ item, onItemUpdated }: CurationItemProps) {
       const fileName = `${Math.random()}.${fileExt}`;
       const filePath = `curation-items/${item.id}/${fileName}`;
 
+      // Upload the file with upsert option
       const { error: uploadError } = await supabase.storage
-        .from('images')
-        .upload(filePath, file);
+        .from('profile-images')
+        .upload(filePath, file, {
+          cacheControl: '3600',
+          upsert: true
+        });
 
-      if (uploadError) throw uploadError;
+      if (uploadError) {
+        if (uploadError.message.includes('bucket')) {
+          throw new Error('Storage bucket error. Please check your Supabase storage configuration.');
+        }
+        throw uploadError;
+      }
 
       // Get public URL
       const { data: { publicUrl } } = supabase.storage
-        .from('images')
+        .from('profile-images')
         .getPublicUrl(filePath);
+
+      if (!publicUrl) {
+        throw new Error('Failed to get public URL for the uploaded image');
+      }
 
       setImageUrl(publicUrl);
     } catch (error: any) {
@@ -183,7 +221,7 @@ export function CurationItem({ item, onItemUpdated }: CurationItemProps) {
             <>
               <div className="flex justify-between items-start">
                 <h4 className="font-medium text-base md:text-lg">{item.title}</h4>
-                {user && (
+                {isOwner && (
                   <Button
                     variant="ghost"
                     size="icon"

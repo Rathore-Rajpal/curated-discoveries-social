@@ -39,79 +39,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
 
-  useEffect(() => {
-    let mounted = true;
-    
-    const init = async () => {
-      try {
-        // Get session
-        const { data: { session } } = await supabase.auth.getSession();
-        
-        if (!mounted) return;
-        
-        setSession(session);
-        setUser(session?.user ?? null);
-        
-        if (session?.user) {
-          // Get profile
-          const { data: profile, error } = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('id', session.user.id)
-            .single();
-            
-          if (!mounted) return;
-          
-          if (error) {
-            console.error('Profile error:', error);
-            setError(error.message);
-          } else if (profile) {
-            setUserProfile(profile as UserProfile);
-          }
-        }
-      } catch (error) {
-        console.error('Init error:', error);
-      } finally {
-        if (mounted) {
-          setLoading(false);
-        }
-      }
-    };
-
-    init();
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (!mounted) return;
-      
-      setSession(session);
-      setUser(session?.user ?? null);
-      
-      if (event === 'SIGNED_IN' && session?.user) {
-        const { data: profile, error } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', session.user.id)
-          .single();
-          
-        if (!mounted) return;
-        
-        if (error) {
-          console.error('Profile error:', error);
-          setError(error.message);
-        } else if (profile) {
-          setUserProfile(profile as UserProfile);
-        }
-      } else if (event === 'SIGNED_OUT') {
-        setUserProfile(null);
-      }
-    });
-
-    return () => {
-      mounted = false;
-      subscription.unsubscribe();
-    };
-  }, []);
-
+  // Function to fetch user profile
   const fetchUserProfile = async (userId: string) => {
     try {
       console.log('AuthProvider: Starting profile fetch for user:', userId);
@@ -126,7 +54,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (error) {
         console.error('AuthProvider: Error fetching user profile:', error);
         setError(error.message);
-        setLoading(false);
         return;
       }
 
@@ -142,11 +69,64 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.error('AuthProvider: Error fetching profile:', error);
       setError(error.message);
     } finally {
-      console.log('AuthProvider: Profile fetch complete');
       setProfileLoading(false);
-      setLoading(false);
     }
   };
+
+  // Initialize auth state
+  useEffect(() => {
+    let mounted = true;
+    
+    const init = async () => {
+      try {
+        // Get session
+        const { data: { session } } = await supabase.auth.getSession();
+        
+        if (!mounted) return;
+        
+        setSession(session);
+        setUser(session?.user ?? null);
+        
+        if (session?.user) {
+          await fetchUserProfile(session.user.id);
+        }
+      } catch (error) {
+        console.error('Init error:', error);
+        if (mounted) {
+          setError('Failed to initialize authentication');
+        }
+      } finally {
+        if (mounted) {
+          setLoading(false);
+        }
+      }
+    };
+
+    init();
+
+    // Subscribe to auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (!mounted) return;
+      
+      console.log('Auth state changed:', event);
+      setSession(session);
+      setUser(session?.user ?? null);
+      
+      if (event === 'SIGNED_IN' && session?.user) {
+        await fetchUserProfile(session.user.id);
+      } else if (event === 'SIGNED_OUT') {
+        setUserProfile(null);
+        setError(null);
+      } else if (event === 'TOKEN_REFRESHED' && session?.user) {
+        await fetchUserProfile(session.user.id);
+      }
+    });
+
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
+  }, []);
 
   const signIn = async (email: string, password: string) => {
     try {
@@ -355,7 +335,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   if (loading) {
-    console.log('AuthProvider: Still loading...');
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-brand-purple"></div>
@@ -380,7 +359,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     );
   }
 
-  console.log('AuthProvider: Rendering with state:', { user, session, loading });
+  console.log('AuthProvider: Rendering with state:', { 
+    user: user?.id, 
+    session: !!session, 
+    loading,
+    profileLoading,
+    hasProfile: !!userProfile 
+  });
+
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 

@@ -4,6 +4,8 @@ import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Link } from "react-router-dom";
 import { EditProfileDialog } from "./EditProfileDialog";
 import { Pencil } from "lucide-react";
+import { FollowButton } from "@/components/social/FollowButton";
+import { useAuth } from "@/contexts/AuthContext";
 
 export interface UserProfileHeaderProps {
   user: {
@@ -14,7 +16,6 @@ export interface UserProfileHeaderProps {
     avatarUrl?: string;
     coverUrl?: string;
     isCurrentUser?: boolean;
-    isFollowing?: boolean;
   };
   stats: {
     followersCount: number;
@@ -25,6 +26,7 @@ export interface UserProfileHeaderProps {
 
 export function UserProfileHeader({ user, stats }: UserProfileHeaderProps) {
   const [editProfileOpen, setEditProfileOpen] = useState(false);
+  const { user: currentUser } = useAuth();
 
   return (
     <div className="bg-background rounded-lg overflow-hidden border">
@@ -56,10 +58,20 @@ export function UserProfileHeader({ user, stats }: UserProfileHeaderProps) {
               <Pencil className="h-4 w-4" />
               Edit Profile
             </Button>
-          ) : (
-            <Button className="ml-auto">
-              {user.isFollowing ? "Following" : "Follow"}
-            </Button>
+          ) : currentUser && (
+            <div className="ml-auto">
+              <FollowButton 
+                userId={user.id} 
+                onFollowChange={(following) => {
+                  // Update stats when follow status changes
+                  if (following) {
+                    stats.followersCount++;
+                  } else {
+                    stats.followersCount--;
+                  }
+                }}
+              />
+            </div>
           )}
         </div>
         
@@ -67,12 +79,12 @@ export function UserProfileHeader({ user, stats }: UserProfileHeaderProps) {
           <p className="mt-4 text-sm md:text-base">{user.bio}</p>
         )}
         
-        <div className="flex gap-4 mt-4">
-          <Link to={`/profile/${user.username}/followers`} className="text-sm">
+        <div className="flex gap-6 mt-4">
+          <Link to={`/profile/${user.username}/followers`} className="text-sm hover:underline">
             <span className="font-semibold">{stats.followersCount}</span>
             <span className="text-muted-foreground ml-1">Followers</span>
           </Link>
-          <Link to={`/profile/${user.username}/following`} className="text-sm">
+          <Link to={`/profile/${user.username}/following`} className="text-sm hover:underline">
             <span className="font-semibold">{stats.followingCount}</span>
             <span className="text-muted-foreground ml-1">Following</span>
           </Link>

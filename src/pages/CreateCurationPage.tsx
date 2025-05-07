@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { useAuth } from "@/contexts/AuthContext";
@@ -30,7 +30,19 @@ interface CreateCurationFormValues {
   }[];
 }
 
-export function CreateCurationPage() {
+const defaultFormValues: CreateCurationFormValues = {
+  title: "",
+  description: "",
+  cover_image: "",
+  items: [{
+    title: "",
+    description: "",
+    external_url: "",
+    image_url: "",
+  }]
+};
+
+function CreateCurationPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
@@ -41,20 +53,10 @@ export function CreateCurationPage() {
   const [currentItemIndex, setCurrentItemIndex] = useState<number | null>(null);
 
   const form = useForm<CreateCurationFormValues>({
-    defaultValues: {
-      title: "",
-      description: "",
-      cover_image: "",
-      items: [{
-        title: "",
-        description: "",
-        external_url: "",
-        image_url: "",
-      }]
-    }
+    defaultValues: defaultFormValues
   });
 
-  const handleImageUpload = async (file: File, type: 'curation' | 'item', itemIndex?: number) => {
+  const handleImageUpload = useCallback(async (file: File, type: 'curation' | 'item', itemIndex?: number) => {
     if (!user) {
       toast.error('You must be logged in to upload images');
       return;
@@ -118,9 +120,9 @@ export function CreateCurationPage() {
       if (type === 'curation') setUploadingImage(false);
       else setUploadingItemImage(false);
     }
-  };
+  }, [user, form]);
 
-  const addItem = () => {
+  const addItem = useCallback(() => {
     const items = form.getValues('items');
     form.setValue('items', [
       ...items,
@@ -131,14 +133,14 @@ export function CreateCurationPage() {
         image_url: "",
       }
     ]);
-  };
+  }, [form]);
 
-  const removeItem = (index: number) => {
+  const removeItem = useCallback((index: number) => {
     const items = form.getValues('items');
     form.setValue('items', items.filter((_, i) => i !== index));
-  };
+  }, [form]);
 
-  const onSubmit = async (data: CreateCurationFormValues) => {
+  const onSubmit = useCallback(async (data: CreateCurationFormValues) => {
     if (!user) return;
     
     try {
@@ -182,7 +184,10 @@ export function CreateCurationPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [user, navigate]);
+
+  const items = form.watch('items');
+  const memoizedItems = useMemo(() => items, [items]);
 
   return (
     <MainLayout>
@@ -300,7 +305,7 @@ export function CreateCurationPage() {
                 </Button>
               </div>
 
-              {form.watch('items').map((_, index) => (
+              {memoizedItems.map((_, index) => (
                 <div key={index} className="border rounded-lg p-4 space-y-4">
                   <div className="flex justify-between items-center">
                     <h3 className="font-medium">Item {index + 1}</h3>
@@ -458,3 +463,5 @@ export function CreateCurationPage() {
     </MainLayout>
   );
 }
+
+export default React.memo(CreateCurationPage);

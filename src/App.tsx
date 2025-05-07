@@ -2,15 +2,23 @@ import { BrowserRouter as Router } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ErrorBoundary } from 'react-error-boundary';
 import { AuthProvider } from '@/contexts/AuthContext';
+import { SocialProvider } from '@/contexts/SocialContext';
 import AppRoutes from '@/routes';
 import { Toaster } from 'sonner';
-import VerifyEmail from '@/pages/auth/VerifyEmail';
+import { Suspense, lazy } from 'react';
+
+// Lazy load the VerifyEmail component
+const VerifyEmail = lazy(() => import('@/pages/auth/VerifyEmail'));
 
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       retry: 1,
       refetchOnWindowFocus: false,
+      staleTime: 5 * 60 * 1000, // 5 minutes
+      cacheTime: 10 * 60 * 1000, // 10 minutes
+      refetchOnMount: false,
+      refetchOnReconnect: false,
     },
   },
 });
@@ -38,8 +46,12 @@ function App() {
       <QueryClientProvider client={queryClient}>
         <Router>
           <AuthProvider>
-            <AppRoutes />
-            <Toaster position="top-right" />
+            <SocialProvider>
+              <Suspense fallback={<div>Loading...</div>}>
+                <AppRoutes />
+              </Suspense>
+              <Toaster position="top-right" />
+            </SocialProvider>
           </AuthProvider>
         </Router>
       </QueryClientProvider>
