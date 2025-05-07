@@ -40,11 +40,6 @@ interface SupabaseCuration {
   comments: { count: number }[];
 }
 
-interface CountResult {
-  curation_id: string;
-  count: number;
-}
-
 const colorVariants = ["blue", "purple", "green", "orange", "pink"] as const;
 
 export default function Index() {
@@ -57,12 +52,10 @@ export default function Index() {
 
   const fetchCurations = async () => {
     try {
-      console.log('Starting to fetch curations...');
       setLoading(true);
       setError(null);
 
-      console.log('Building Supabase query...');
-      const query = supabase
+      const { data, error } = await supabase
         .from('curations')
         .select(`
           id,
@@ -81,56 +74,45 @@ export default function Index() {
         `)
         .order('created_at', { ascending: false });
 
-      console.log('Executing query...');
-      const { data, error } = await query;
-
       if (error) {
-        console.error('Supabase query error:', error);
         setError(error.message);
-        setLoading(false);
         return;
       }
 
-      console.log('Query successful, data:', data);
-      
       if (!data) {
-        console.log('No data returned from query');
         setCurations([]);
-        setLoading(false);
         return;
       }
 
-      console.log('Formatting curations...');
-      const formattedCurations = (data as unknown as SupabaseCuration[]).map(curation => {
-        console.log('Processing curation:', curation);
-        return {
-          ...curation,
-          items_count: curation.items[0]?.count || 0,
-          likes_count: curation.likes?.[0]?.count || 0,
-          comments_count: curation.comments?.[0]?.count || 0
-        };
-      });
+      const formattedCurations = (data as unknown as SupabaseCuration[]).map((curation) => ({
+        id: curation.id,
+        title: curation.title,
+        description: curation.description,
+        cover_image: curation.cover_image,
+        author: {
+          username: curation.author.username,
+          full_name: curation.author.full_name,
+          avatar_url: curation.author.avatar_url
+        },
+        items_count: curation.items?.[0]?.count || 0,
+        likes_count: curation.likes?.[0]?.count || 0,
+        comments_count: curation.comments?.[0]?.count || 0,
+        created_at: curation.created_at
+      }));
 
-      console.log('Setting formatted curations:', formattedCurations);
-      setCurations(formattedCurations as Curation[]);
+      setCurations(formattedCurations);
     } catch (error: any) {
-      console.error('Error in fetchCurations:', error);
       setError(error.message || 'Failed to fetch curations');
     } finally {
-      console.log('Setting loading to false');
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    console.log('useEffect triggered, activeTab:', activeTab);
     fetchCurations();
   }, [activeTab]);
 
-  console.log('Rendering Index component, loading:', loading, 'error:', error, 'curations count:', curations.length);
-
   if (loading) {
-    console.log('Showing loading state');
     return (
       <MainLayout>
         <div className="flex justify-center items-center h-screen">
@@ -142,7 +124,6 @@ export default function Index() {
   }
 
   if (error) {
-    console.log('Showing error state:', error);
     return (
       <MainLayout>
         <div className="text-center p-8">
@@ -182,21 +163,22 @@ export default function Index() {
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {curations.map((curation) => (
+                {curations.map((curation, index) => (
                   <CurationCard
                     key={curation.id}
                     id={curation.id}
                     title={curation.title}
                     description={curation.description}
-                    itemCount={curation.items_count}
+                    imageUrl={curation.cover_image}
                     author={{
-                      id: curation.id,
-                      name: curation.author.full_name || curation.author.username,
                       username: curation.author.username,
+                      fullName: curation.author.full_name || curation.author.username,
                       avatarUrl: curation.author.avatar_url
                     }}
+                    createdAt={curation.created_at}
                     likesCount={curation.likes_count}
                     commentsCount={curation.comments_count}
+                    colorVariant={colorVariants[index % colorVariants.length]}
                   />
                 ))}
               </div>
@@ -210,21 +192,22 @@ export default function Index() {
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {curations.map((curation) => (
+                {curations.map((curation, index) => (
                   <CurationCard
                     key={curation.id}
                     id={curation.id}
                     title={curation.title}
                     description={curation.description}
-                    itemCount={curation.items_count}
+                    imageUrl={curation.cover_image}
                     author={{
-                      id: curation.id,
-                      name: curation.author.full_name || curation.author.username,
                       username: curation.author.username,
+                      fullName: curation.author.full_name || curation.author.username,
                       avatarUrl: curation.author.avatar_url
                     }}
+                    createdAt={curation.created_at}
                     likesCount={curation.likes_count}
                     commentsCount={curation.comments_count}
+                    colorVariant={colorVariants[index % colorVariants.length]}
                   />
                 ))}
               </div>
@@ -238,21 +221,22 @@ export default function Index() {
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {curations.map((curation) => (
+                {curations.map((curation, index) => (
                   <CurationCard
                     key={curation.id}
                     id={curation.id}
                     title={curation.title}
                     description={curation.description}
-                    itemCount={curation.items_count}
+                    imageUrl={curation.cover_image}
                     author={{
-                      id: curation.id,
-                      name: curation.author.full_name || curation.author.username,
                       username: curation.author.username,
+                      fullName: curation.author.full_name || curation.author.username,
                       avatarUrl: curation.author.avatar_url
                     }}
+                    createdAt={curation.created_at}
                     likesCount={curation.likes_count}
                     commentsCount={curation.comments_count}
+                    colorVariant={colorVariants[index % colorVariants.length]}
                   />
                 ))}
               </div>

@@ -14,6 +14,7 @@ interface UserProfile {
   website: string | null;
   created_at: string;
   updated_at: string;
+  cover_url: string | null;
 }
 
 interface AuthContextType {

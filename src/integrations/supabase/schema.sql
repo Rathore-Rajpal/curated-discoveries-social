@@ -59,6 +59,15 @@ CREATE TABLE IF NOT EXISTS shares (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW())
 );
 
+-- Create saved_curations table
+CREATE TABLE IF NOT EXISTS saved_curations (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+    curation_id UUID REFERENCES curations(id) ON DELETE CASCADE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()),
+    UNIQUE(user_id, curation_id)
+);
+
 -- Enable Row Level Security
 ALTER TABLE curations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE curation_items ENABLE ROW LEVEL SECURITY;
@@ -66,6 +75,7 @@ ALTER TABLE likes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE comments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE follows ENABLE ROW LEVEL SECURITY;
 ALTER TABLE shares ENABLE ROW LEVEL SECURITY;
+ALTER TABLE saved_curations ENABLE ROW LEVEL SECURITY;
 
 -- Create or replace policies for curations
 DROP POLICY IF EXISTS "Public curations are viewable by everyone" ON curations;
@@ -191,6 +201,22 @@ CREATE POLICY "Users can share curations"
     ON shares FOR INSERT
     WITH CHECK (auth.uid() = user_id);
 
+-- Create or replace policies for saved_curations
+DROP POLICY IF EXISTS "Users can view their own saved curations" ON saved_curations;
+CREATE POLICY "Users can view their own saved curations"
+    ON saved_curations FOR SELECT
+    USING (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users can save curations" ON saved_curations;
+CREATE POLICY "Users can save curations"
+    ON saved_curations FOR INSERT
+    WITH CHECK (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users can unsave their own curations" ON saved_curations;
+CREATE POLICY "Users can unsave their own curations"
+    ON saved_curations FOR DELETE
+    USING (auth.uid() = user_id);
+
 -- Create or replace indexes for better performance
 DROP INDEX IF EXISTS idx_likes_user_id;
 CREATE INDEX idx_likes_user_id ON likes(user_id);
@@ -214,4 +240,10 @@ DROP INDEX IF EXISTS idx_shares_user_id;
 CREATE INDEX idx_shares_user_id ON shares(user_id);
 
 DROP INDEX IF EXISTS idx_shares_curation_id;
-CREATE INDEX idx_shares_curation_id ON shares(curation_id); 
+CREATE INDEX idx_shares_curation_id ON shares(curation_id);
+
+DROP INDEX IF EXISTS idx_saved_curations_user_id;
+CREATE INDEX idx_saved_curations_user_id ON saved_curations(user_id);
+
+DROP INDEX IF EXISTS idx_saved_curations_curation_id;
+CREATE INDEX idx_saved_curations_curation_id ON saved_curations(curation_id); 

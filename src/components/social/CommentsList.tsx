@@ -4,7 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { formatDistanceToNow, isValid } from 'date-fns';
+import { formatDistanceToNow } from 'date-fns';
 import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -26,9 +26,6 @@ interface CommentsListProps {
 const formatDate = (dateString: string): string => {
   try {
     const date = new Date(dateString);
-    if (!isValid(date)) {
-      return 'Invalid date';
-    }
     return formatDistanceToNow(date, { addSuffix: true });
   } catch (error) {
     console.error('Error formatting date:', error);
@@ -36,7 +33,7 @@ const formatDate = (dateString: string): string => {
   }
 };
 
-export const CommentsList: React.FC<CommentsListProps> = ({ curationId }) => {
+export function CommentsList({ curationId }: CommentsListProps) {
   const { user } = useAuth();
   const { getComments, addComment, updateComment, deleteComment } = useSocial();
   const [comments, setComments] = useState<Comment[]>([]);
@@ -225,4 +222,4 @@ export const CommentsList: React.FC<CommentsListProps> = ({ curationId }) => {
       </div>
     </div>
   );
-}; 
+} 

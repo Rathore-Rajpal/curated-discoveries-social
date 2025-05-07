@@ -12,7 +12,10 @@ interface SocialContextType {
   followUser: (userId: string) => Promise<void>;
   unfollowUser: (userId: string) => Promise<void>;
   shareCuration: (curationId: string, platform: string) => Promise<void>;
+  saveCuration: (curationId: string) => Promise<void>;
+  unsaveCuration: (curationId: string) => Promise<void>;
   isLiked: (curationId: string) => Promise<boolean>;
+  isSaved: (curationId: string) => Promise<boolean>;
   isFollowing: (userId: string) => Promise<boolean>;
   getComments: (curationId: string) => Promise<any[]>;
   getUserStats: (userId: string) => Promise<{
@@ -25,7 +28,15 @@ interface SocialContextType {
 
 const SocialContext = createContext<SocialContextType | undefined>(undefined);
 
-export const SocialProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+export const useSocial = () => {
+  const context = useContext(SocialContext);
+  if (!context) {
+    throw new Error('useSocial must be used within a SocialProvider');
+  }
+  return context;
+};
+
+export function SocialProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   const [loading, setLoading] = useState(false);
 
@@ -37,15 +48,28 @@ export const SocialProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
     try {
       setLoading(true);
+      // Check if already liked
+      const { data: existingLike } = await supabase
+        .from('likes')
+        .select('id')
+        .match({ user_id: user.id, curation_id: curationId })
+        .single();
+
+      if (existingLike) {
+        throw new Error('You have already liked this curation');
+      }
+
       const { error } = await supabase
         .from('likes')
-        .insert({ user_id: user.id, curation_id: curationId });
+        .insert({
+          user_id: user.id,
+          curation_id: curationId,
+        });
 
       if (error) throw error;
-      toast.success('Liked successfully');
     } catch (error: any) {
       console.error('Error liking curation:', error);
-      toast.error(error.message || 'Failed to like curation');
+      throw error;
     } finally {
       setLoading(false);
     }
@@ -62,10 +86,9 @@ export const SocialProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         .match({ user_id: user.id, curation_id: curationId });
 
       if (error) throw error;
-      toast.success('Unliked successfully');
     } catch (error: any) {
       console.error('Error unliking curation:', error);
-      toast.error(error.message || 'Failed to unlike curation');
+      throw error;
     } finally {
       setLoading(false);
     }
@@ -88,10 +111,9 @@ export const SocialProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         });
 
       if (error) throw error;
-      toast.success('Comment added successfully');
     } catch (error: any) {
       console.error('Error adding comment:', error);
-      toast.error(error.message || 'Failed to add comment');
+      throw error;
     } finally {
       setLoading(false);
     }
@@ -108,10 +130,9 @@ export const SocialProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         .match({ id: commentId, user_id: user.id });
 
       if (error) throw error;
-      toast.success('Comment updated successfully');
     } catch (error: any) {
       console.error('Error updating comment:', error);
-      toast.error(error.message || 'Failed to update comment');
+      throw error;
     } finally {
       setLoading(false);
     }
@@ -128,10 +149,9 @@ export const SocialProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         .match({ id: commentId, user_id: user.id });
 
       if (error) throw error;
-      toast.success('Comment deleted successfully');
     } catch (error: any) {
       console.error('Error deleting comment:', error);
-      toast.error(error.message || 'Failed to delete comment');
+      throw error;
     } finally {
       setLoading(false);
     }
@@ -143,22 +163,19 @@ export const SocialProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       return;
     }
 
-    if (user.id === userId) {
-      toast.error('You cannot follow yourself');
-      return;
-    }
-
     try {
       setLoading(true);
       const { error } = await supabase
         .from('follows')
-        .insert({ follower_id: user.id, following_id: userId });
+        .insert({
+          follower_id: user.id,
+          following_id: userId,
+        });
 
       if (error) throw error;
-      toast.success('Followed successfully');
     } catch (error: any) {
       console.error('Error following user:', error);
-      toast.error(error.message || 'Failed to follow user');
+      throw error;
     } finally {
       setLoading(false);
     }
@@ -175,10 +192,9 @@ export const SocialProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         .match({ follower_id: user.id, following_id: userId });
 
       if (error) throw error;
-      toast.success('Unfollowed successfully');
     } catch (error: any) {
       console.error('Error unfollowing user:', error);
-      toast.error(error.message || 'Failed to unfollow user');
+      throw error;
     } finally {
       setLoading(false);
     }
@@ -192,40 +208,114 @@ export const SocialProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
     try {
       setLoading(true);
-      const { error } = await supabase
-        .from('shares')
-        .insert({
-          user_id: user.id,
-          curation_id: curationId,
-          platform,
-        });
+      const { data: curation, error } = await supabase
+        .from('curations')
+        .select('title')
+        .eq('id', curationId)
+        .single();
 
       if (error) throw error;
 
-      // Get the curation URL
-      const curationUrl = `${window.location.origin}/curation/${curationId}`;
-      
-      // Share based on platform
+      const shareUrl = `${window.location.origin}/curation/${curationId}`;
+      const shareText = `Check out this curation: ${curation.title}`;
+
       switch (platform) {
         case 'twitter':
-          window.open(`https://twitter.com/intent/tweet?url=${encodeURIComponent(curationUrl)}`, '_blank');
+          window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText)}&url=${encodeURIComponent(shareUrl)}`);
           break;
         case 'facebook':
-          window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(curationUrl)}`, '_blank');
+          window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}`);
           break;
         case 'linkedin':
-          window.open(`https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(curationUrl)}`, '_blank');
+          window.open(`https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(shareUrl)}`);
+          break;
+        case 'copy':
+          await navigator.clipboard.writeText(shareUrl);
+          toast.success('Link copied to clipboard');
           break;
         default:
-          // Copy to clipboard
-          await navigator.clipboard.writeText(curationUrl);
-          toast.success('Link copied to clipboard');
+          throw new Error('Invalid share platform');
       }
     } catch (error: any) {
       console.error('Error sharing curation:', error);
-      toast.error(error.message || 'Failed to share curation');
+      throw error;
     } finally {
       setLoading(false);
+    }
+  };
+
+  const saveCuration = async (curationId: string) => {
+    if (!user) {
+      toast.error('Please log in to save curations');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      // Check if already saved
+      const { data: existingSave } = await supabase
+        .from('saved_curations')
+        .select('id')
+        .match({ user_id: user.id, curation_id: curationId })
+        .single();
+
+      if (existingSave) {
+        throw new Error('You have already saved this curation');
+      }
+
+      const { error } = await supabase
+        .from('saved_curations')
+        .insert({
+          user_id: user.id,
+          curation_id: curationId,
+        });
+
+      if (error) throw error;
+    } catch (error: any) {
+      console.error('Error saving curation:', error);
+      throw error;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const unsaveCuration = async (curationId: string) => {
+    if (!user) return;
+
+    try {
+      setLoading(true);
+      const { error } = await supabase
+        .from('saved_curations')
+        .delete()
+        .match({ user_id: user.id, curation_id: curationId });
+
+      if (error) throw error;
+    } catch (error: any) {
+      console.error('Error unsaving curation:', error);
+      throw error;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const isSaved = async (curationId: string): Promise<boolean> => {
+    if (!user) return false;
+
+    try {
+      const { data, error } = await supabase
+        .from('saved_curations')
+        .select('id')
+        .match({ user_id: user.id, curation_id: curationId })
+        .single();
+
+      if (error && error.code !== 'PGRST116') { // PGRST116 is "no rows returned"
+        throw error;
+      }
+
+      return !!data;
+    } catch (error) {
+      console.error('Error checking save status:', error);
+      return false;
     }
   };
 
@@ -239,7 +329,10 @@ export const SocialProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         .match({ user_id: user.id, curation_id: curationId })
         .single();
 
-      if (error) throw error;
+      if (error && error.code !== 'PGRST116') { // PGRST116 is the "no rows returned" error
+        throw error;
+      }
+
       return !!data;
     } catch (error) {
       console.error('Error checking like status:', error);
@@ -257,7 +350,10 @@ export const SocialProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         .match({ follower_id: user.id, following_id: userId })
         .single();
 
-      if (error) throw error;
+      if (error && error.code !== 'PGRST116') {
+        throw error;
+      }
+
       return !!data;
     } catch (error) {
       console.error('Error checking follow status:', error);
@@ -281,6 +377,7 @@ export const SocialProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         `)
         .eq('curation_id', curationId)
         .order('created_at', { ascending: false });
+
       if (error) throw error;
       return data || [];
     } catch (error) {
@@ -329,19 +426,14 @@ export const SocialProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     followUser,
     unfollowUser,
     shareCuration,
+    saveCuration,
+    unsaveCuration,
     isLiked,
+    isSaved,
     isFollowing,
     getComments,
     getUserStats,
   };
 
   return <SocialContext.Provider value={value}>{children}</SocialContext.Provider>;
-};
-
-export const useSocial = () => {
-  const context = useContext(SocialContext);
-  if (context === undefined) {
-    throw new Error('useSocial must be used within a SocialProvider');
-  }
-  return context;
-}; 
+} 

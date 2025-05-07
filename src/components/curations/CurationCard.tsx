@@ -4,7 +4,7 @@ import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card"
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Heart, MessageCircle, Share2, Bookmark, MoreHorizontal } from "lucide-react";
-import { formatDistanceToNow, isValid } from 'date-fns';
+import { formatDistanceToNow } from 'date-fns';
 import { SocialActions } from '@/components/social/SocialActions';
 
 // Color variants for curations
@@ -38,9 +38,6 @@ export interface CurationCardProps {
 const formatDate = (dateString: string): string => {
   try {
     const date = new Date(dateString);
-    if (!isValid(date)) {
-      return 'Invalid date';
-    }
     return formatDistanceToNow(date, { addSuffix: true });
   } catch (error) {
     console.error('Error formatting date:', error);

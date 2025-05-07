@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import { useParams, Link } from "react-router-dom";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { UserProfileHeader } from "@/components/user/UserProfileHeader";
@@ -22,185 +22,220 @@ interface ProfileStats {
   followersCount: number;
   followingCount: number;
   curationsCount: number;
+  likesCount: number;
 }
 
 interface Curation {
   id: string;
   title: string;
   description: string | null;
-  itemCount: number;
+  imageUrl: string | null;
+  createdAt: string;
   author: {
-    id: string;
-    name: string;
     username: string;
+    fullName: string | null;
     avatarUrl: string | null;
   };
   likesCount: number;
   commentsCount: number;
-  colorVariant: "blue" | "purple" | "green" | "orange" | "pink";
 }
 
 const colorVariants = ["blue", "purple", "green", "orange", "pink"] as const;
 
-const ProfilePage = () => {
-  const { username } = useParams<{ username: string }>();
-  const { user, userProfile } = useAuth();
+export function ProfilePage() {
+  const { user } = useAuth();
+  const { username } = useParams();
   const [profile, setProfile] = useState<Profile | null>(null);
-  const [stats, setStats] = useState<ProfileStats>({
-    followersCount: 0,
-    followingCount: 0,
-    curationsCount: 0
-  });
+  const [stats, setStats] = useState<ProfileStats | null>(null);
   const [curations, setCurations] = useState<Curation[]>([]);
+  const [likedCurations, setLikedCurations] = useState<Curation[]>([]);
+  const [savedCurations, setSavedCurations] = useState<Curation[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [isCurrentUser, setIsCurrentUser] = useState(false);
+  const [activeTab, setActiveTab] = useState('curations');
   const [isFollowing, setIsFollowing] = useState(false);
 
+  const isCurrentUser = useMemo(() => user?.id === profile?.id, [user?.id, profile?.id]);
+
+  const formatCuration = (curation: any): Curation => ({
+    id: curation.id,
+    title: curation.title,
+    description: curation.description,
+    imageUrl: curation.image_url,
+    createdAt: curation.created_at,
+    author: {
+      username: curation.profiles?.username || '',
+      fullName: curation.profiles?.full_name || null,
+      avatarUrl: curation.profiles?.avatar_url || null
+    },
+    likesCount: curation.likes_count || 0,
+    commentsCount: curation.comments_count || 0
+  });
+
   useEffect(() => {
-    const fetchProfile = async () => {
-      setLoading(true);
-      setError(null);
+    const fetchProfileData = async () => {
       try {
-        if (!username) {
-          setError('No username provided');
-          return;
+        setLoading(true);
+        setError(null);
+
+        // Fetch profile data
+        const { data: profileData, error: profileError } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('username', username)
+          .single();
+
+        if (profileError) throw profileError;
+        setProfile(profileData);
+
+        // Fetch user's curations
+        const { data: curationsData, error: curationsError } = await supabase
+          .from('curations')
+          .select(`
+            *,
+            profiles:user_id (
+              username,
+              full_name,
+              avatar_url
+            )
+          `)
+          .eq('user_id', profileData.id)
+          .order('created_at', { ascending: false });
+
+        if (curationsError) throw curationsError;
+
+        const formattedCurations = curationsData.map(formatCuration);
+        setCurations(formattedCurations);
+
+        // Fetch liked curations
+        const { data: likedData, error: likedError } = await supabase
+          .from('likes')
+          .select(`
+            curation_id,
+            curations (
+              *,
+              profiles:user_id (
+                username,
+                full_name,
+                avatar_url
+              )
+            )
+          `)
+          .eq('user_id', profileData.id)
+          .order('created_at', { ascending: false });
+
+        if (likedError) throw likedError;
+
+        const formattedLikedCurations = likedData
+          .map(item => formatCuration(item.curations))
+          .filter(Boolean);
+        setLikedCurations(formattedLikedCurations);
+
+        // Fetch saved curations only if viewing own profile
+        if (user?.id === profileData.id) {
+          const { data: userSavedData, error: userSavedError } = await supabase
+            .from('saved_curations')
+            .select(`
+              curation_id,
+              curations (
+                *,
+                profiles:user_id (
+                  username,
+                  full_name,
+                  avatar_url
+                )
+              )
+            `)
+            .eq('user_id', profileData.id)
+            .order('created_at', { ascending: false });
+
+          if (userSavedError) throw userSavedError;
+
+          const formattedSavedCurations = userSavedData
+            .map(item => formatCuration(item.curations))
+            .filter(Boolean);
+          setSavedCurations(formattedSavedCurations);
         }
 
-        console.log('Fetching profile for username:', username);
+        // Fetch stats
+        const { count: followersCount } = await supabase
+          .from('follows')
+          .select('*', { count: 'exact', head: true })
+          .eq('following_id', profileData.id);
 
-        // If viewing own profile and we have userProfile data
-        if (userProfile && (username === userProfile.username || username === 'me')) {
-          console.log('Using current user profile data');
-          setProfile({
-            id: userProfile.id,
-            username: userProfile.username,
-            full_name: userProfile.full_name,
-            avatar_url: userProfile.avatar_url,
-            cover_url: userProfile.cover_url,
-            bio: userProfile.bio
-          });
-          setIsCurrentUser(true);
-          await fetchProfileData(userProfile.id);
-        } else {
-          // Fetch other user's profile
-          console.log('Fetching other user profile');
-          const { data, error } = await supabase
-            .from('profiles')
+        const { count: followingCount } = await supabase
+          .from('follows')
+          .select('*', { count: 'exact', head: true })
+          .eq('follower_id', profileData.id);
+
+        const { count: curationsCount } = await supabase
+          .from('curations')
+          .select('*', { count: 'exact', head: true })
+          .eq('user_id', profileData.id);
+
+        const { count: likesCount } = await supabase
+          .from('likes')
+          .select('*', { count: 'exact', head: true })
+          .eq('user_id', profileData.id);
+
+        setStats({
+          followersCount: followersCount || 0,
+          followingCount: followingCount || 0,
+          curationsCount: curationsCount || 0,
+          likesCount: likesCount || 0
+        });
+
+        // Check if the current user is following this profile
+        if (user) {
+          const { data: followData } = await supabase
+            .from('follows')
             .select('*')
-            .eq('username', username)
+            .eq('follower_id', user.id)
+            .eq('following_id', profileData.id)
             .single();
-
-          if (error) {
-            console.error('Error fetching profile:', error);
-            setError(error.message);
-            return;
-          }
-
-          if (!data) {
-            setError('Profile not found');
-            return;
-          }
-
-          console.log('Fetched profile:', data);
-          setProfile(data as unknown as Profile);
-          setIsCurrentUser(user?.id === data.id);
           
-          // Check if the current user is following this profile
-          if (user) {
-            const { data: followData } = await supabase
-              .from('follows')
-              .select('*')
-              .eq('follower_id', user.id)
-              .eq('following_id', data.id)
-              .single();
-            
-            setIsFollowing(!!followData);
-          }
-
-          await fetchProfileData(data.id);
+          setIsFollowing(!!followData);
         }
-      } catch (error: any) {
-        console.error('Error in profile page:', error);
-        setError(error.message || 'Failed to load profile');
+      } catch (err: any) {
+        console.error('Error fetching profile data:', err);
+        setError(err.message);
       } finally {
         setLoading(false);
       }
     };
 
-    const fetchProfileData = async (profileId: string) => {
-      try {
-        console.log('Fetching profile data for user:', profileId);
-        
-        // Fetch followers count
-        const { count: followersCount } = await supabase
-          .from('follows')
-          .select('*', { count: 'exact', head: true })
-          .eq('following_id', profileId);
-
-        // Fetch following count
-        const { count: followingCount } = await supabase
-          .from('follows')
-          .select('*', { count: 'exact', head: true })
-          .eq('follower_id', profileId);
-
-        // Fetch curations
-        const { data: curationsData, error: curationsError } = await supabase
-          .from('curations')
-          .select(`
-            id, 
-            title, 
-            description,
-            cover_image,
-            created_at,
-            items:curation_items(count),
-            likes:likes(count),
-            comments:comments(count)
-          `)
-          .eq('user_id', profileId)
-          .order('created_at', { ascending: false });
-
-        if (curationsError) {
-          console.error('Error fetching curations:', curationsError);
-          setError(curationsError.message);
-          return;
-        }
-
-        console.log('Fetched curations:', curationsData);
-
-        setStats({
-          followersCount: followersCount || 0,
-          followingCount: followingCount || 0,
-          curationsCount: curationsData?.length || 0
-        });
-
-        const formattedCurations = curationsData?.map((curation: any, index: number) => ({
-          id: curation.id,
-          title: curation.title,
-          description: curation.description,
-          itemCount: curation.items[0]?.count || 0,
-          author: {
-            id: profileId,
-            name: profile?.full_name || profile?.username || '',
-            username: profile?.username || '',
-            avatarUrl: profile?.avatar_url
-          },
-          likesCount: curation.likes?.[0]?.count || 0,
-          commentsCount: curation.comments?.[0]?.count || 0,
-          colorVariant: colorVariants[index % colorVariants.length]
-        })) || [];
-
-        setCurations(formattedCurations);
-      } catch (error: any) {
-        console.error('Error fetching profile data:', error);
-        setError(error.message || 'Failed to load profile data');
-      }
-    };
-
     if (username) {
-      fetchProfile();
+      fetchProfileData();
     }
-  }, [username, user, userProfile]);
+  }, [username, user]);
+
+  const renderCurations = (curations: Curation[], emptyMessage: string) => {
+    if (curations.length === 0) {
+      return (
+        <div className="text-center py-8 text-muted-foreground">
+          {emptyMessage}
+        </div>
+      );
+    }
+
+    return (
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {curations.map(curation => (
+          <CurationCard
+            key={curation.id}
+            id={curation.id}
+            title={curation.title}
+            description={curation.description}
+            imageUrl={curation.imageUrl}
+            author={curation.author}
+            createdAt={curation.createdAt}
+            likesCount={curation.likesCount}
+            commentsCount={curation.commentsCount}
+          />
+        ))}
+      </div>
+    );
+  };
 
   if (loading) {
     return (
@@ -254,10 +289,9 @@ const ProfilePage = () => {
             bio: profile.bio || undefined,
             avatarUrl: profile.avatar_url || undefined,
             coverUrl: profile.cover_url || undefined,
-            isCurrentUser,
-            isFollowing,
+            isCurrentUser
           }} 
-          stats={stats} 
+          stats={stats || { followersCount: 0, followingCount: 0, curationsCount: 0, likesCount: 0 }} 
         />
         
         {isCurrentUser && (
@@ -271,54 +305,43 @@ const ProfilePage = () => {
           </div>
         )}
         
-        <Tabs defaultValue="curations" className="w-full">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="w-full border-b rounded-none">
             <TabsTrigger value="curations" className="flex-1">Curations</TabsTrigger>
-            <TabsTrigger value="saved" className="flex-1">Saved</TabsTrigger>
+            {isCurrentUser && <TabsTrigger value="saved" className="flex-1">Saved</TabsTrigger>}
             <TabsTrigger value="liked" className="flex-1">Liked</TabsTrigger>
           </TabsList>
           
           <TabsContent value="curations" className="animate-enter pt-6">
-            {curations.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {curations.map((curation) => (
-                  <CurationCard key={curation.id} {...curation} />
-                ))}
-              </div>
-            ) : (
-              <div className="text-center py-8 text-muted-foreground">
-                {isCurrentUser ? (
-                  <div className="space-y-4">
-                    <p>You haven't created any curations yet.</p>
-                    <Link to="/create">
-                      <Button variant="outline" className="flex items-center gap-2">
-                        <PlusSquare className="h-4 w-4" />
-                        Create your first curation
-                      </Button>
-                    </Link>
-                  </div>
-                ) : (
-                  <p>No curations yet.</p>
-                )}
-              </div>
+            {renderCurations(
+              curations,
+              isCurrentUser 
+                ? "You haven't created any curations yet."
+                : `${profile.username} hasn't created any curations yet.`
             )}
           </TabsContent>
           
-          <TabsContent value="saved" className="animate-enter pt-6">
-            <div className="text-center py-8 text-muted-foreground">
-              <p>No saved curations yet.</p>
-            </div>
-          </TabsContent>
+          {isCurrentUser && (
+            <TabsContent value="saved" className="animate-enter pt-6">
+              {renderCurations(
+                savedCurations,
+                "You haven't saved any curations yet."
+              )}
+            </TabsContent>
+          )}
           
           <TabsContent value="liked" className="animate-enter pt-6">
-            <div className="text-center py-8 text-muted-foreground">
-              <p>No liked curations yet.</p>
-            </div>
+            {renderCurations(
+              likedCurations,
+              isCurrentUser 
+                ? "You haven't liked any curations yet."
+                : `${profile.username} hasn't liked any curations yet.`
+            )}
           </TabsContent>
         </Tabs>
       </div>
     </MainLayout>
   );
-};
+}
 
 export default ProfilePage;

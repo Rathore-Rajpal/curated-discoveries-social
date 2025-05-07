@@ -283,6 +283,40 @@ export interface Database {
           }
         ]
       }
+      saved_curations: {
+        Row: {
+          id: string
+          user_id: string
+          curation_id: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          curation_id: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          curation_id?: string
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "saved_curations_curation_id_fkey"
+            columns: ["curation_id"]
+            referencedRelation: "curations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "saved_curations_user_id_fkey"
+            columns: ["user_id"]
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
     }
     Views: {
       [_ in never]: never

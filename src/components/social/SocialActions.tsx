@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { Heart, MessageCircle, Share2, Loader2 } from 'lucide-react';
-import { useSocial } from '@/contexts/SocialContext';
+import { Heart, MessageCircle, Share2, Bookmark } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
+import { useSocial } from '@/contexts/SocialContext';
+import { toast } from 'sonner';
 import {
   Dialog,
   DialogContent,
@@ -10,52 +11,52 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
-import { Textarea } from '@/components/ui/textarea';
-import { toast } from 'sonner';
-import { CommentsList } from './CommentsList';
-import { formatDistanceToNow } from 'date-fns';
+import { CommentsList } from '@/components/social/CommentsList';
 
 interface SocialActionsProps {
   curationId: string;
   likesCount: number;
   commentsCount: number;
-  onLikeChange?: (liked: boolean) => void;
-  onCommentAdd?: () => void;
 }
 
-export const SocialActions: React.FC<SocialActionsProps> = ({
-  curationId,
-  likesCount,
-  commentsCount,
-  onLikeChange,
-  onCommentAdd,
-}) => {
+export function SocialActions({ curationId, likesCount: initialLikesCount, commentsCount: initialCommentsCount }: SocialActionsProps) {
   const { user } = useAuth();
-  const { likeCuration, unlikeCuration, addComment, isLiked, shareCuration } = useSocial();
-  const [liked, setLiked] = useState(false);
-  const [likes, setLikes] = useState(likesCount);
-  const [comments, setComments] = useState(commentsCount);
-  const [comment, setComment] = useState('');
-  const [isCommentDialogOpen, setIsCommentDialogOpen] = useState(false);
-  const [isShareDialogOpen, setIsShareDialogOpen] = useState(false);
+  const { likeCuration, unlikeCuration, shareCuration, isLiked, saveCuration, unsaveCuration, isSaved } = useSocial();
+  const [likes, setLikes] = useState(initialLikesCount);
+  const [comments, setComments] = useState(initialCommentsCount);
+  const [isLikedByUser, setIsLikedByUser] = useState(false);
+  const [isSavedByUser, setIsSavedByUser] = useState(false);
   const [isLiking, setIsLiking] = useState(false);
-  const [isCommenting, setIsCommenting] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [isSharing, setIsSharing] = useState(false);
+  const [showComments, setShowComments] = useState(false);
 
   useEffect(() => {
     const checkLikeStatus = async () => {
       if (user) {
         try {
-          const isLikedByUser = await isLiked(curationId);
-          setLiked(isLikedByUser);
+          const liked = await isLiked(curationId);
+          setIsLikedByUser(liked);
         } catch (error) {
           console.error('Error checking like status:', error);
-          toast.error('Failed to check like status');
         }
       }
     };
+
+    const checkSaveStatus = async () => {
+      if (user) {
+        try {
+          const saved = await isSaved(curationId);
+          setIsSavedByUser(saved);
+        } catch (error) {
+          console.error('Error checking save status:', error);
+        }
+      }
+    };
+
     checkLikeStatus();
-  }, [user, curationId, isLiked]);
+    checkSaveStatus();
+  }, [user, curationId, isLiked, isSaved]);
 
   const handleLike = async () => {
     if (!user) {
@@ -65,53 +66,25 @@ export const SocialActions: React.FC<SocialActionsProps> = ({
 
     try {
       setIsLiking(true);
-      if (liked) {
+      if (isLikedByUser) {
         await unlikeCuration(curationId);
-        setLikes(prev => prev - 1);
-        toast.success('Unliked successfully');
+        setLikes(prev => Math.max(0, prev - 1));
+        setIsLikedByUser(false);
+        toast.success('Curation unliked');
       } else {
         await likeCuration(curationId);
         setLikes(prev => prev + 1);
-        toast.success('Liked successfully');
+        setIsLikedByUser(true);
+        toast.success('Curation liked');
       }
-      setLiked(!liked);
-      onLikeChange?.(!liked);
     } catch (error) {
-      console.error('Error toggling like:', error);
-      toast.error('Failed to update like status');
+      toast.error('Failed to update like');
     } finally {
       setIsLiking(false);
     }
   };
 
-  const handleComment = async () => {
-    if (!user) {
-      toast.error('Please log in to comment');
-      return;
-    }
-
-    if (!comment.trim()) {
-      toast.error('Please enter a comment');
-      return;
-    }
-
-    try {
-      setIsCommenting(true);
-      await addComment(curationId, comment);
-      setComments(prev => prev + 1);
-      setComment('');
-      setIsCommentDialogOpen(false);
-      onCommentAdd?.();
-      toast.success('Comment added successfully');
-    } catch (error) {
-      console.error('Error adding comment:', error);
-      toast.error('Failed to add comment');
-    } finally {
-      setIsCommenting(false);
-    }
-  };
-
-  const handleShare = async (platform: string) => {
+  const handleShare = async () => {
     if (!user) {
       toast.error('Please log in to share curations');
       return;
@@ -119,130 +92,92 @@ export const SocialActions: React.FC<SocialActionsProps> = ({
 
     try {
       setIsSharing(true);
-      await shareCuration(curationId, platform);
-      setIsShareDialogOpen(false);
-      toast.success('Shared successfully');
+      await shareCuration(curationId, 'copy');
+      toast.success('Curation shared successfully');
     } catch (error) {
-      console.error('Error sharing:', error);
       toast.error('Failed to share curation');
     } finally {
       setIsSharing(false);
     }
   };
 
+  const handleSave = async () => {
+    if (!user) {
+      toast.error('Please log in to save curations');
+      return;
+    }
+
+    try {
+      setIsSaving(true);
+      if (isSavedByUser) {
+        await unsaveCuration(curationId);
+        setIsSavedByUser(false);
+        toast.success('Removed from saved');
+      } else {
+        await saveCuration(curationId);
+        setIsSavedByUser(true);
+        toast.success('Added to saved');
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to update save status');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   return (
-    <div className="flex items-center gap-4">
-      <Button
-        variant="ghost"
-        size="sm"
-        onClick={handleLike}
-        disabled={isLiking}
-        className={`flex items-center gap-2 ${liked ? 'text-red-500' : ''}`}
-      >
-        {isLiking ? (
-          <Loader2 className="h-5 w-5 animate-spin" />
-        ) : (
-          <Heart className={`h-5 w-5 ${liked ? 'fill-current' : ''}`} />
-        )}
-        <span>{likes}</span>
-      </Button>
+    <div className="flex items-center justify-between w-full">
+      <div className="flex items-center gap-1">
+        <Button
+          variant="ghost"
+          size="icon"
+          className={`h-8 w-8 rounded-full ${isLikedByUser ? 'text-red-500 hover:text-red-600' : ''}`}
+          onClick={handleLike}
+          disabled={isLiking}
+        >
+          <Heart className={`h-4 w-4 ${isLikedByUser ? 'fill-current' : ''}`} />
+        </Button>
+        <span className="text-sm text-muted-foreground">{likes}</span>
 
-      <Dialog open={isCommentDialogOpen} onOpenChange={setIsCommentDialogOpen}>
-        <DialogTrigger asChild>
-          <Button variant="ghost" size="sm" className="flex items-center gap-2">
-            <MessageCircle className="h-5 w-5" />
-            <span>{comments}</span>
-          </Button>
-        </DialogTrigger>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Comments</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
+        <Dialog open={showComments} onOpenChange={setShowComments}>
+          <DialogTrigger asChild>
+            <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full ml-2">
+              <MessageCircle className="h-4 w-4" />
+            </Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Comments</DialogTitle>
+            </DialogHeader>
             <CommentsList curationId={curationId} />
-            {user && (
-              <div className="flex gap-2">
-                <Textarea
-                  placeholder="Write your comment..."
-                  value={comment}
-                  onChange={(e) => setComment(e.target.value)}
-                  className="flex-1"
-                  disabled={isCommenting}
-                />
-                <Button 
-                  onClick={handleComment} 
-                  disabled={isCommenting || !comment.trim()}
-                >
-                  {isCommenting ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    'Post'
-                  )}
-                </Button>
-              </div>
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
+          </DialogContent>
+        </Dialog>
+        <span className="text-sm text-muted-foreground">{comments}</span>
+      </div>
 
-      <Dialog open={isShareDialogOpen} onOpenChange={setIsShareDialogOpen}>
-        <DialogTrigger asChild>
-          <Button variant="ghost" size="sm" className="flex items-center gap-2">
-            <Share2 className="h-5 w-5" />
+      <div className="flex items-center gap-1">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 rounded-full"
+          onClick={handleShare}
+          disabled={isSharing}
+        >
+          <Share2 className="h-4 w-4" />
+        </Button>
+
+        {user && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className={`h-8 w-8 rounded-full ${isSavedByUser ? 'text-brand-purple hover:text-brand-purple/90' : ''}`}
+            onClick={handleSave}
+            disabled={isSaving}
+          >
+            <Bookmark className={`h-4 w-4 ${isSavedByUser ? 'fill-current' : ''}`} />
           </Button>
-        </DialogTrigger>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Share Curation</DialogTitle>
-          </DialogHeader>
-          <div className="grid grid-cols-2 gap-4">
-            <Button 
-              onClick={() => handleShare('twitter')} 
-              variant="outline"
-              disabled={isSharing}
-            >
-              {isSharing ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                'Twitter'
-              )}
-            </Button>
-            <Button 
-              onClick={() => handleShare('facebook')} 
-              variant="outline"
-              disabled={isSharing}
-            >
-              {isSharing ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                'Facebook'
-              )}
-            </Button>
-            <Button 
-              onClick={() => handleShare('linkedin')} 
-              variant="outline"
-              disabled={isSharing}
-            >
-              {isSharing ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                'LinkedIn'
-              )}
-            </Button>
-            <Button 
-              onClick={() => handleShare('copy')} 
-              variant="outline"
-              disabled={isSharing}
-            >
-              {isSharing ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                'Copy Link'
-              )}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+        )}
+      </div>
     </div>
   );
-}; 
+} 
